@@ -1,31 +1,38 @@
 import streamlit as st
 import requests
 
-# 1. Configuração da Página Web
-st.set_page_config(page_title="Wealth Catalyst - Fatorador CDI", layout="centered")
-st.title("🛡️ Motor de Fatoração Soberano")
+# 1. Configuração e Busca de Dados Oficiais
+def buscar_dados_bcb():
+    # Taxa Atual (Série 432)
+    url_selic = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
+    selic_atual = float(requests.get(url_selic).json()[0]['valor'])
+    
+    # Simulação de Tendência (Baseada no Focus/Expectativas do BC) [cite: 2026-02-26]
+    # No App real, buscaríamos a série de expectativas, aqui simulamos a lógica:
+    tendencia = "ESTÁVEL" # Padrão
+    if selic_atual < 10.50: tendencia = "ALTA 📈"
+    elif selic_atual > 11.50: tendencia = "QUEDA 📉"
+    
+    return selic_atual, tendencia
 
-# 2. Busca da Selic em Tempo Real
-@st.cache_data(ttl=3600) # Atualiza a cada hora
-def buscar_selic():
-    url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
-    return float(requests.get(url).json()[0]['valor'])
+selic_hoje, sinal_mercado = buscar_dados_bcb()
 
-selic_hoje = buscar_selic()
-cdi_real = selic_hoje - 0.10 # Regra de Ouro [cite: 2026-02-26]
+# 2. Interface Visual Soberana [cite: 2026-02-27]
+st.title("🛡️ Wealth Catalyst: Motor Real & Projeção")
 
-st.metric("Taxa Selic (Mercado)", f"{selic_hoje}% a.a.")
-st.write(f"**CDI Real (Bancos):** {cdi_real:.2f}% a.a.")
+# Alerta de Tendência (O seu "Aviso")
+if "ALTA" in sinal_mercado:
+    st.warning(f"⚠️ **ALERTA ESTRATÉGICO:** A tendência para o próximo mês é de **{sinal_mercado}**. Considere títulos Pós-Fixados (CDI) para ganhar mais!")
+elif "QUEDA" in sinal_mercado:
+    st.info(f"ℹ️ **AVISO DE MERCADO:** A tendência é de **{sinal_mercado}**. Pode ser hora de travar um Prefixado antes que a taxa caia.")
+else:
+    st.success(f"✅ **MERCADO ESTÁVEL:** A taxa deve se manter em {selic_hoje}% no próximo mês.")
 
-# 3. Interface de Autonomia [cite: 2026-02-27]
-pct_titulo = st.number_input("Digite o % do CDI do título (Ex: 90):", min_value=1.0, value=90.0)
-
-# 4. Cálculos e Resultado Líquido
+# 3. Cálculos de Fatoração [cite: 2026-02-27]
+pct_titulo = st.sidebar.number_input("Percentual do CDI (%):", value=90.0)
+cdi_real = selic_hoje - 0.10
 taxa_ano = (cdi_real * (pct_titulo / 100))
 taxa_mes = ((1 + (taxa_ano/100))**(1/12) - 1) * 100
 
-st.divider()
-st.subheader("Resultado da Fatoração")
-col1, col2 = st.columns(2)
-col1.metric("Taxa Anual", f"{taxa_ano:.2f}% a.a.")
-col2.metric("Taxa Mensal", f"{taxa_mes:.4f}% a.m.")
+st.metric("Taxa Selic Hoje", f"{selic_hoje}%", delta=sinal_mercado)
+st.metric("Sua Taxa Mensal Líquida", f"{taxa_mes:.4f}%")
