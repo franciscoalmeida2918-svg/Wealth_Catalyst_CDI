@@ -1,49 +1,54 @@
 import streamlit as st
 import requests
 
-# 1. Configuração de Interface Soberana
-st.set_page_config(page_title="Wealth Catalyst - Master CDI", layout="wide")
+# 1. Configuração Direta
+st.set_page_config(page_title="Wealth Catalyst", layout="centered")
 st.title("🛡️ Motor de Fatoração Soberano")
 
-# 2. Busca Automática da Base (Selic BCB)
+# 2. Busca da Selic Real (Base de Cálculo)
 @st.cache_data(ttl=3600)
 def buscar_selic():
     try:
         url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
         return float(requests.get(url).json()[0]['valor'])
     except:
-        return 10.75 # Backup caso a API falhe
+        return 10.75
 
-selic_oficial = buscar_selic()
-cdi_oficial = selic_oficial - 0.10 # Regra de Ouro [cite: 2026-02-26]
+selic_atual = buscar_selic()
+cdi_real = selic_atual - 0.10
 
-# 3. INTERAÇÃO: Onde você digita o CDI [cite: 2026-02-27]
-st.sidebar.header("📥 Entrada de Dados")
-# Aqui é onde você digita o valor, ex: 90, 100, 110
-pct_cdi_digitado = st.sidebar.number_input("Digite o % do CDI do Título:", min_value=1.0, value=100.0, step=1.0)
-isento_ir = st.sidebar.checkbox("Título Isento (LCI/LCA)?", value=True)
+# 3. INTERAÇÃO CENTRALIZADA (Onde você digita)
+st.subheader("⌨️ Digite os dados do seu título")
+col_input1, col_input2 = st.columns(2)
 
-# 4. Cálculos de Fatoração Líquida [cite: 2025-02-25, 2026-02-27]
-taxa_ano_bruta = (cdi_oficial * (pct_cdi_digitado / 100))
-# IR de 17.5% se não for isento (regra de 1 ano)
-taxa_ano_liq = taxa_ano_bruta if isento_ir else taxa_ano_bruta * 0.825
+with col_input1:
+    pct_digitado = st.number_input("Percentual do CDI (%):", min_value=1.0, value=100.0, step=0.5)
+
+with col_input2:
+    tipo_invest = st.selectbox("Tipo de Título:", ["LCI/LCA (Isento)", "CDB (Com IR)"])
+
+# 4. Cálculo de Fatoração Líquida
+taxa_ano_bruta = (cdi_real * (pct_digitado / 100))
+# Desconto de IR (17.5% para 1 ano) se for CDB
+if tipo_invest == "CDB (Com IR)":
+    taxa_ano_liq = taxa_ano_bruta * 0.825
+else:
+    taxa_ano_liq = taxa_ano_bruta
+
 taxa_mes_liq = ((1 + (taxa_ano_liq/100))**(1/12) - 1) * 100
 
-# 5. Tabela Estilo Excel (Foco em Ganho Líquido) [cite: 2026-02-27]
-st.subheader(f"📊 Análise do Título: {pct_cdi_digitado}% do CDI")
-dados_tabela = {
-    "Descrição": ["Selic Atual (BCB)", "CDI Real (Base)", f"Título Digitado ({pct_cdi_digitado}%)"],
-    "Taxa Anual Líquida": [f"{selic_oficial:.2f}%", f"{cdi_oficial:.2f}%", f"**{taxa_ano_liq:.2f}%**"],
-    "Taxa Mensal Líquida": ["-", "-", f"**{taxa_mes_liq:.4f}%**"],
-    "Lucro p/ R$ 2.500 (Mês)": ["-", "-", f"R$ {(2500 * (taxa_mes_liq/100)):.2f}"]
+# 5. TABELA ESTILO EXCEL (Foco no Lucro)
+st.write("### 📊 Resultado Líquido")
+tabela_excel = {
+    "Especificação": ["Selic Meta (Hoje)", "CDI Real", f"Seu Título ({pct_digitado}%)"],
+    "Taxa Anual (%)": [f"{selic_atual:.2f}%", f"{cdi_real:.2f}%", f"**{taxa_ano_liq:.2f}%**"],
+    "Taxa Mensal (%)": ["-", "-", f"**{taxa_mes_liq:.4f}%**"],
+    "Lucro Líquido p/ R$ 2.500": ["-", "-", f"**R$ {(2500 * (taxa_mes_liq/100)):.2f}**"]
 }
-st.table(dados_tabela)
+st.table(tabela_excel)
 
-# 6. Avisos de Estratégia e Tendência [cite: 2026-02-26]
-st.divider()
-if selic_oficial >= 10.0:
-    st.warning(f"⚠️ **AVISO SOBERANO:** Selic alta ({selic_oficial}%). Foque em bater a inflação com este título de {pct_cdi_digitado}% do CDI. [cite: 2026-02-27]")
+# 6. AVISO CURTO DE TENDÊNCIA
+if selic_atual > 10:
+    st.warning(f"⚠️ Selic em {selic_atual}%: Títulos Pós-fixados são a melhor estratégia agora.")
 else:
-    st.info("ℹ️ **ESTRATÉGIA:** Taxas em queda. Considere travar este rendimento se for um Prefixado. [cite: 2026-02-26]")
-
-st.success(f"🎯 **Meta de 10 Anos:** Com aporte de R$ 2.500, este título rende R$ {(2500 * (taxa_mes_liq/100) * 12):.2f} líquidos no primeiro ano. [cite: 2026-02-27]")
+    st.info("ℹ️ Selic em queda: Considere travar taxas em títulos Prefixados.")
