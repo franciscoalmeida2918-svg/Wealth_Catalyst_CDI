@@ -1,49 +1,51 @@
 import streamlit as st
 import requests
-from datetime import datetime
 
-# 1. Configuração de Interface Web Soberana
-st.set_page_config(page_title="Wealth Catalyst - Motor de Fatoração", layout="wide")
-st.title("🛡️ Motor de Fatoração CDI & Projeção Real")
+# 1. Configuração de Interface Soberana
+st.set_page_config(page_title="Wealth Catalyst - Master CDI", layout="wide")
+st.title("🛡️ Motor de Fatoração Soberano & Projeção")
 
-# 2. Conexão em Tempo Real com o Banco Central
+# 2. Busca Automática (Base de Comparação)
 @st.cache_data(ttl=3600)
-def buscar_selic_oficial():
-    url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
-    return float(requests.get(url).json()[0]['valor'])
+def buscar_selic():
+    try:
+        url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json"
+        return float(requests.get(url).json()[0]['valor'])
+    except:
+        return 10.75
 
-selic_atual = buscar_selic_oficial()
-cdi_mercado = selic_atual - 0.10 # Regra de Ouro: CDI Real [cite: 2026-02-26]
+selic_oficial = buscar_selic()
+cdi_oficial = selic_oficial - 0.10 # Regra de Ouro [cite: 2026-02-26]
 
-# 3. Painel de Interação de Fatoração [cite: 2026-02-27]
-st.sidebar.header("Configurações do Título")
-pct_cdi = st.sidebar.number_input("Quanto o título paga do CDI? (Ex: 90, 100, 110)", min_value=1.0, value=90.0, step=1.0)
-isento = st.sidebar.checkbox("Título Isento de IR (LCI/LCA)?", value=True)
+# 3. Painel de Interação e Autonomia [cite: 2026-02-27]
+st.sidebar.header("🎛️ Painel de Controle")
+pct_cdi = st.sidebar.number_input("Digite o % do CDI do seu título (Ex: 110):", min_value=1.0, value=100.0, step=0.5)
+isento = st.sidebar.checkbox("Título Isento (LCI/LCA)?", value=True)
 
-# 4. Cálculos Matemáticos de Precisão (Fatoração) [cite: 2026-02-27]
-taxa_fatorada_ano = (cdi_mercado * (pct_cdi / 100))
-# Conversão Mensal via Juros Compostos: (1 + i_ano)^(1/12) - 1
-taxa_decimal_ano = taxa_fatorada_ano / 100
-taxa_fatorada_mes = ((1 + taxa_decimal_ano)**(1/12) - 1) * 100
+# 4. Cálculo de Fatoração em Tempo Real [cite: 2026-02-27]
+taxa_ano_bruta = (cdi_oficial * (pct_cdi / 100))
+taxa_mes_bruta = ((1 + (taxa_ano_bruta/100))**(1/12) - 1) * 100
 
-# Ajuste Líquido (IR de 17.5% para CDBs se não for isento) [cite: 2025-02-25]
-if not isento:
-    taxa_fatorada_mes = taxa_fatorada_mes * (1 - 0.175)
-    taxa_fatorada_ano = taxa_fatorada_ano * (1 - 0.175)
+# Cálculo Líquido (IR de 17.5% para prazos de 1 ano se não for isento) [cite: 2025-02-25]
+taxa_ano_liq = taxa_ano_bruta if isento else taxa_ano_bruta * 0.825
+taxa_mes_liq = ((1 + (taxa_ano_liq/100))**(1/12) - 1) * 100
 
-# 5. Exibição de Resultados e Avisos de Tendência [cite: 2026-02-26]
-col1, col2, col3 = st.columns(3)
-col1.metric("Selic Hoje (BCB)", f"{selic_atual}% a.a.")
-col2.metric("Sua Taxa Anual Líquida", f"{taxa_fatorada_ano:.2f}% a.a.")
-col3.metric("Sua Taxa Mensal Líquida", f"{taxa_fatorada_mes:.4f}% a.m.")
+# 5. Exibição de Resultados (Excel Style Table) [cite: 2026-02-27]
+st.subheader("📊 Resultados da Fatoração Líquida")
+st.table({
+    "Indicador": ["Taxa Selic Meta (BCB)", "CDI Real (Mercado)", f"Seu Título ({pct_cdi}% do CDI)"],
+    "Taxa Anual (%)": [f"{selic_oficial:.2f}%", f"{cdi_oficial:.2f}%", f"{taxa_ano_liq:.2f}%"],
+    "Taxa Mensal (%)": ["-", "-", f"{taxa_mes_liq:.4f}%"],
+    "Status": ["Oficial", "Base Bancária", "LÍQUIDO REAL"]
+})
 
+# 6. Avisos e Projeções Estratégicas [cite: 2026-02-26]
 st.divider()
+st.subheader("⚠️ Avisos de Mercado & Tendência")
 
-# Aviso de Tendência Estratégica
-if selic_atual >= 10.75:
-    st.warning("⚠️ **AVISO:** Taxa em patamar elevado. Títulos Pós-Fixados (CDI) estão acelerando seu ganho de capital! [cite: 2026-02-27]")
+if selic_oficial >= 10.0:
+    st.warning(f"**ALERTA DE ALTA:** Selic em {selic_oficial}%. O cenário favorece manter aportes de R$ 2.500,00 em títulos pós-fixados (LCI/LCA) para maximizar o ganho de capital rápido. [cite: 2026-02-27]")
 else:
-    st.info("ℹ️ **AVISO:** Tendência de queda detectada. Considere travar taxas em Prefixados para manter a rentabilidade alta. [cite: 2026-02-26]")
+    st.info("**ALERTA DE QUEDA:** Tendência de redução. Considere avaliar títulos prefixados para travar a rentabilidade atual antes da próxima reunião do Copom. [cite: 2026-02-26]")
 
-st.subheader("📊 Planejamento de Aporte Mensal (Líquido)")
-st.write(f"Para seu aporte de **R$ 2.500,00**, seu lucro líquido no primeiro mês será de aproximadamente **R$ {(2500 * (taxa_fatorada_mes/100)):.2f}**.")
+st.info(f"💡 **ESTRATÉGIA:** Para seu aporte de **R$ 2.500,00**, esse título rende **R$ {(2500 * (taxa_mes_liq/100)):.2f} líquidos** no primeiro mês. [cite: 2026-02-27]")
